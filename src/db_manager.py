@@ -1,4 +1,4 @@
-#from src.api_handler import to_get_10_employers
+from src.api_handler import to_get_10_employers
 import psycopg2
 from psycopg2 import sql
 from psycopg2.errors import UndefinedColumn, UndefinedTable, UniqueViolation, DuplicateTable

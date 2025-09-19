@@ -27,7 +27,7 @@ def main():
     incorrect_input = True
     db_name = ''
     while incorrect_input:
-        # db_name = input('Введите имя БД. Это должна быть строка(буквы и/или цифры) без знаков:\n')
+        db_name = input('Введите имя БД. Это должна быть строка(буквы и/или цифры) без знаков:\n')
         db_name = 'check_db'
         if db_name.isalnum() or '_' in db_name:
             incorrect_input = False
@@ -38,7 +38,7 @@ def main():
     with DBManager(db_name) as db:
         if db.db_exists:
 
-            # rewrite = input("Похоже такая БД существует, обновить последние данные?\nда/нет\n".lower())
+            rewrite = input("Похоже такая БД существует, обновить последние данные?\nда/нет\n".lower())
             rewrite = 'нет'
             while rewrite not in ['да', 'нет']:
                 print('Ответ либо "да", либо "нет")')
@@ -63,9 +63,9 @@ def main():
             '---4. Получение списка вакансий, зп которых выше среднего по вакансиям\n'
             f'{human_response(db.get_vacancies_with_higher_salary())}\n\n'
             '---5.1 Получение всех вакансий по ключевому слову(допустим "Чат")---\n'
-            f'{db.get_vacancies_with_keyword('Чат')}\n\n'
+            f'{db.get_vacancies_with_keyword('"Чат")}\n\n'
             '---5.2 Получение всех вакансий по ключевому слову(допустим "Космонавт")---\n'
-            f'{human_response(db.get_vacancies_with_keyword('Космонавт'))}\n\n'
+            f'{human_response(db.get_vacancies_with_keyword("Космонавт"))}\n\n'
         )
 
 

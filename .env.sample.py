@@ -1,0 +1,3 @@
+DATABASE_URL=your_database_url
+API_KEY=your_api_key
+PSTGRE_PASS='123456'
