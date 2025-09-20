@@ -1,15 +1,16 @@
-from src.api_handler import to_get_10_employers
+import os
 import psycopg2
 from psycopg2 import sql
-from psycopg2.errors import UndefinedColumn, UndefinedTable, UniqueViolation, DuplicateTable
+from psycopg2.errors import UndefinedTable, UndefinedColumn, UniqueViolation, DuplicateTable
 from psycopg2.extras import RealDictCursor
+from src.api_handler import to_get_10_employers
 from src.vacancy_handler import VacHandler
 from src.abstract_cls import AbcDBManager
-import os
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
-
+logging.basicConfig(level=logging.INFO)
 
 class DBManager(AbcDBManager):
     """
@@ -28,39 +29,35 @@ class DBManager(AbcDBManager):
             'dbname': db_name,
             'user': os.getenv('DB_USER', 'postgres'),
             'password': os.getenv('DB_PASSWORD', '123456'),
-            'options': '-c client_encoding=utf8'
+            'options': '-c client_encoding=UTF8'
         }
 
     def __enter__(self):
-        try:
-            self.__conn = psycopg2.connect(**self.__conn_params)
-            self.__conn.autocommit = True
-        except (Exception, UnicodeDecodeError) as e:
-            print(f"Ошибка подключения: {e}")
-            self.__conn_params['dbname'] = 'postgres'
-            self.db_exists = False
-
-            self.create_database()
-
-            # Повторное подключение к новой базе данных
-            self.__conn = psycopg2.connect(**self.__conn_params)
-            self.__conn.autocommit = True
-
+        self.__connect()
         self.__cur = self.__conn.cursor(cursor_factory=RealDictCursor)
         return self
 
+    def __connect(self):
+        """ Метод для подключения к базе данных """
+        try:
+            self.__conn = psycopg2.connect(**self.__conn_params)
+            self.__conn.autocommit = True
+        except (psycopg2.Error, UnicodeDecodeError) as e:
+            logging.error(f"Ошибка подключения: {e}")
+            self.__conn_params['dbname'] = 'postgres'
+            self.db_exists = False
+            self.create_database()
+            self.__connect()  # Повторное подключение к новой базе данных
+
     def create_database(self):
         """Создание базы данных"""
-        err_conn = psycopg2.connect(**self.__conn_params)
-        err_conn.autocommit = True
-        err_cur = err_conn.cursor()
         try:
-            err_cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self.db_name)))
-        except Exception as e:
-            print(f"Ошибка создания базы данных: {e}")
-        finally:
-            err_cur.close()
-            err_conn.close()
+            with psycopg2.connect(**self.__conn_params) as err_conn:
+                err_conn.autocommit = True
+                with err_conn.cursor() as err_cur:
+                    err_cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self.db_name)))
+        except psycopg2.Error as e:
+            logging.error(f"Ошибка создания базы данных: {e}")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.__cur:
@@ -71,27 +68,23 @@ class DBManager(AbcDBManager):
             else:
                 self.__conn.rollback()
             self.__conn.close()
-            print('Соединение отключено')
+            logging.info('Соединение отключено')
 
     def to_update_db(self):
-        """
-        Метод обновления таблицы с вакансиями
-        """
+        """ Метод обновления таблицы с вакансиями """
         try:
             self.__to_add_data(self.__cur)
-            print('Запись БД окончена')
+            logging.info('Запись БД окончена')
         except (UndefinedTable, UndefinedColumn, UniqueViolation, DuplicateTable):
-            print('Обновление БД начато...')
+            logging.info('Обновление БД начато...')
             self.__cur.execute('DROP TABLE IF EXISTS vacancies;')
             self.__cur.execute('DROP TABLE IF EXISTS employers;')
             self.__to_add_data(self.__cur)
-            print('Обновление БД окончено')
+            logging.info('Обновление БД окончено')
 
     @staticmethod
     def __to_add_data(cur):
-        """
-        Метод добавления данных в БД
-        """
+        """ Метод добавления данных в БД """
         cur.execute("""
             CREATE TABLE employers (
                 employer_id INT,
@@ -100,7 +93,6 @@ class DBManager(AbcDBManager):
                 vacancies_url VARCHAR,
                 rating REAL,
                 employer_trusted BOOLEAN,
-
                 CONSTRAINT pk_companies_company_id PRIMARY KEY (employer_id)
             );
         """)
@@ -117,21 +109,19 @@ class DBManager(AbcDBManager):
                 vac_currency VARCHAR,
                 vac_avg_salary INT,
                 employer_id INT,
-
                 CONSTRAINT pk_vacancies_vacancy_id PRIMARY KEY (vacancy_id),
                 CONSTRAINT fk_employers_to_vacancies FOREIGN KEY (employer_id) REFERENCES employers(employer_id)
             );
         """)
 
-        print('Получение данных с HH.ru...')
+        logging.info('Получение данных с HH.ru...')
         api_response = to_get_10_employers()
-        print('Данные получены.')
+        logging.info('Данные получены.')
 
         vacancies = VacHandler()
 
         for vac in api_response:
             employer_field = vac['employer']
-
             emp_params = vacancies.to_give_emp_params(employer_field)
 
             comp_query = """
@@ -140,11 +130,9 @@ class DBManager(AbcDBManager):
                         VALUES (%s, %s, %s, %s, %s, %s)
                         ON CONFLICT (employer_id) DO NOTHING;
                         """
-            comp_data = (*emp_params,)
-            cur.execute(comp_query, comp_data)
+            cur.execute(comp_query, emp_params)
 
             vac_params = vacancies.to_give_vac_params(vac, emp_params)
-
             query = """
                     INSERT INTO vacancies (vacancy_id, vacancy_name, city, vacancy_url, schedule, vac_salary_from,
                     vac_salary_to, vac_currency, vac_avg_salary, employer_id)
@@ -160,13 +148,10 @@ class DBManager(AbcDBManager):
                     vac_avg_salary = EXCLUDED.vac_avg_salary,
                     employer_id = EXCLUDED.employer_id;
                     """
-            vacancy_data = (*vac_params,)
-            cur.execute(query, vacancy_data)
+            cur.execute(query, vac_params)
 
     def get_companies_and_vacancies_count(self) -> list:
-        """
-        Метод получения списка всех компаний и кол-ва их вакансий
-        """
+        """ Метод получения списка всех компаний и кол-ва их вакансий """
         self.__cur.execute("""
         SELECT COUNT(v.vacancy_id) AS vac_count, e.employer_id, e.employer_name
         FROM vacancies AS v
@@ -178,10 +163,7 @@ class DBManager(AbcDBManager):
         return [dict(row) for row in self.__cur.fetchall()]
 
     def get_all_vacancies(self) -> list:
-        """
-        Метод получения всех вакансий с указанием
-        названия компании, названия вакансии, зп и ссылки на нее
-        """
+        """ Метод получения всех вакансий с указанием названия компании, названия вакансии, зп и ссылки на нее """
         self.__cur.execute("""
             SELECT e.employer_name, v.vacancy_name, v.vac_salary_from, v.vac_salary_to, v.vac_avg_salary, v.vacancy_url
             FROM vacancies AS v
@@ -191,53 +173,36 @@ class DBManager(AbcDBManager):
         return [dict(row) for row in self.__cur.fetchall()]
 
     def get_avg_salary(self) -> dict:
-        """
-        Метод получения средней зп по вакансиям
-        """
+        """ Метод получения средней зп по вакансиям """
         self.__cur.execute("""
             SELECT AVG(vac_avg_salary) AS average_salary
             FROM vacancies;
         """)
 
-        avg_salary = self.__cur.fetchall()
-        avg_salary[0]['average_salary'] = round(float(avg_salary[0]['average_salary']), 2)
+        avg_salary = self.__cur.fetchone()
+        avg_salary['average_salary'] = round(float(avg_salary['average_salary']), 2)
 
-        return dict(avg_salary[0])
+        return avg_salary
 
     def get_vacancies_with_higher_salary(self) -> list:
-        """
-        Метод получения списка вакансий, зп которых выше среднего по вакансиям
-        """
+        """ Метод получения списка вакансий, зп которых выше среднего по вакансиям """
         self.__cur.execute("""
             SELECT *
             FROM vacancies
-            WHERE vac_avg_salary > (
-                SELECT AVG(vac_avg_salary)
-                FROM vacancies);
+            WHERE vac_avg_salary > (SELECT AVG(vac_avg_salary) FROM vacancies);
         """)
 
         return [dict(row) for row in self.__cur.fetchall()]
 
     def get_vacancies_with_keyword(self, keyword: str) -> list | None:
-        """
-        Метод получения всех вакансий по ключевому слову
-        """
+        """ Метод получения всех вакансий по ключевому слову """
         if isinstance(keyword, str):
             self.__cur.execute("""
                 SELECT *
                 FROM vacancies
-                WHERE vacancy_name
-                ILIKE %s;""", (f'%{keyword}%',))
+                WHERE vacancy_name ILIKE %s;""", (f'%{keyword}%',))
 
             return [dict(row) for row in self.__cur.fetchall()]
 
-# if __name__ == '__main__':
-#     with DBManager('testdb') as db:
-#         print('Проверка связи')
-#         db.to_update_db()
-#         print(type(db.get_companies_and_vacancies_count()[0]))
-#         print(db.get_companies_and_vacancies_count())
-#         print(db.get_all_vacancies())
-#         print(db.get_avg_salary())
-#         print(db.get_vacancies_with_higher_salary())
-#         print("-----", db.get_vacancies_with_keyword('чат'))
+#print(f"DB_USER: {os.getenv('DB_USER')}")
+#print(f"DB_PASSWORD: {os.getenv('DB_PASSWORD')}")
