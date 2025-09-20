@@ -1,16 +1,5 @@
 from src.db_manager import DBManager
 
-def human_response(data: list):
-    """
-    Функция очеловечивания ответа методов класса
-    """
-    if data:
-        result = ""
-        for item in data:
-            result += f'{item}\n'
-        return result.strip()
-    else:
-        return 'Таких вакансий не найдено'
 
 def main():
     """
@@ -49,21 +38,55 @@ def main():
         else:
             db.to_update_db()
 
-        print(
-            'Сейчас продемонстрирую функционал:\n'
-            '---1. Получение списка всех компаний и кол-ва их вакансий---\n'
-            f'{human_response(db.get_companies_and_vacancies_count())}\n\n'
-            '---2. Получение всех вакансий с указанием названия компании, названия вакансии, зп и ссылки на нее---\n'
-            f'{human_response(db.get_all_vacancies())}\n\n'
-            '---3. Получение средней зп по вакансиям---\n'
-            f'{human_response([db.get_avg_salary()])}\n\n'
-            '---4. Получение списка вакансий, зп которых выше среднего по вакансиям---\n'
-            f'{human_response(db.get_vacancies_with_higher_salary())}\n\n'
-            '---5.1 Получение всех вакансий по ключевому слову (допустим "Чат")---\n'
-            f'{human_response(db.get_vacancies_with_keyword("Чат"))}\n\n'
-            '---5.2 Получение всех вакансий по ключевому слову (допустим "Космонавт")---\n'
-            f'{human_response(db.get_vacancies_with_keyword("Космонавт"))}\n\n'
-        )
+        # 1. Получение списка всех компаний и кол-ва их вакансий
+        print('Сейчас продемонстрирую функционал:\n'
+              '---1. Получение списка всех компаний и кол-ва их вакансий---\n')
+        data = db.get_companies_and_vacancies_count()
+        for elem in data:
+            print(f'Название компании: {elem["employer_name"]}. Коллтчество вакансий: {elem["vac_count"]}')
+            print("-" * 50)
+
+        # 2. Получение всех вакансий с указанием названия компании, названия вакансии, зп и ссылки на нее
+        print('---2. Получение всех вакансий с указанием названия компании, названия вакансии, зп и ссылки на нее---\n')
+        data = db.get_all_vacancies()
+        for elem in data:
+            salary = elem.get("salary", "Не указана")  # Используем метод get для безопасного доступа к ключу
+            print(
+                f'Компания: {elem["employer_name"]}, Вакансия: {elem["vacancy_name"]}, Зарплата: {salary}, Ссылка: {elem["vacancy_url"]}')
+            print("-" * 50)
+
+        # 3. Получение средней зп по вакансиям
+        print('---3. Получение средней зп по вакансиям---\n')
+        avg_salary = db.get_avg_salary()
+        print(f'Средняя зарплата по вакансиям: {avg_salary}\n')
+
+        # 4. Получение списка вакансий, зп которых выше среднего по вакансиям
+        print('---4. Получение списка вакансий, зп которых выше среднего по вакансиям---\n')
+        data = db.get_vacancies_with_higher_salary()
+        for elem in data:
+            employer_name = elem.get("employer_name", "Не указана")
+            vacancy_name = elem.get("vacancy_name", "Не указана")
+            salary = elem.get("salary", "Не указана")
+            vacancy_url = elem.get("vacancy_url", "Не указана")
+            print(f'Компания: {employer_name}, Вакансия: {vacancy_name}, Зарплата: {salary}, Ссылка: {vacancy_url}')
+            print("-" * 50)
+
+        # 5.1 Получение всех вакансий по ключевому слову (допустим "Чат")
+        print('---5.1 Получение всех вакансий по ключевому слову (допустим "Чат")---\n')
+        data = db.get_vacancies_with_keyword("Чат")
+        for elem in data:
+            print(
+                f'Компания: {elem["employer_name"]}, Вакансия: {elem["vacancy_name"]}, Зарплата: {elem["salary"]}, Ссылка: {elem["vacancy_url"]}')
+            print("-" * 50)
+
+        # 5.2 Получение всех вакансий по ключевому слову (допустим "Космонавт")
+        print('---5.2 Получение всех вакансий по ключевому слову (допустим "Космонавт")---\n')
+        data = db.get_vacancies_with_keyword("Космонавт")
+        for elem in data:
+            print(
+                f'Компания: {elem["employer_name"]}, Вакансия: {elem["vacancy_name"]}, Зарплата: {elem["salary"]}, Ссылка: {elem["vacancy_url"]}')
+            print("-" * 50)
+
 
 if __name__ == '__main__':
     main()
